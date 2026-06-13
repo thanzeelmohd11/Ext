@@ -1,0 +1,71 @@
+import requests
+import re
+
+def extract_m3u8(url):
+    """Fetch and parse M3u8 playlist"""
+    try:
+        response = requests.get(url, timeout=10)
+        response.raise_for_status()
+        
+        lines = response.text.strip().split('\n')
+        
+        streams = []
+        current_info = {}
+        
+        for line in lines:
+            line = line.strip()
+            
+            # Parse EXT-X-STREAM-INF (variant streams)
+            if line.startswith('#EXT-X-STREAM-INF:'):
+                current_info = parse_stream_info(line)
+            
+            # Collect URI (next non-comment line)
+            elif line and not line.startswith('#'):
+                if current_info:
+                    current_info['uri'] = line
+                    streams.append(current_info)
+                    current_info = {}
+                else:
+                    streams.append({'uri': line})
+        
+        return streams
+    
+    except requests.exceptions.RequestException as e:
+        print(f"Error fetching URL: {e}")
+        return None
+
+def parse_stream_info(info_line):
+    """Parse EXT-X-STREAM-INF attributes"""
+    info = {}
+    
+    # Extract bandwidth
+    bandwidth = re.search(r'BANDWIDTH=(\d+)', info_line)
+    if bandwidth:
+        info['bandwidth'] = bandwidth.group(1)
+    
+    # Extract resolution
+    resolution = re.search(r'RESOLUTION=([\d\w]+)', info_line)
+    if resolution:
+        info['resolution'] = resolution.group(1)
+    
+    # Extract codec
+    codecs = re.search(r'CODECS="([^"]+)"', info_line)
+    if codecs:
+        info['codecs'] = codecs.group(1)
+    
+    return info
+
+if __name__ == "__main__":
+    url = "https://mzaalombr.pc.cdn.bitgravity.com/mzaalombr/output/Thazhuara/master.m3u8"
+    
+    streams = extract_m3u8(url)
+    
+    if streams:
+        print(f"Found {len(streams)} stream(s):\n")
+        for i, stream in enumerate(streams, 1):
+            print(f"Stream {i}:")
+            for key, value in stream.items():
+                print(f"  {key}: {value}")
+            print()
+    else:
+        print("Failed to extract streams")
